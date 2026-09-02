@@ -1,53 +1,102 @@
 """
-CLOUD API KLASIFIKASI APEL GRADE A/B (REVISI: 3 KELAS + CONFIDENCE THRESHOLD)
-======================================
+CLOUD API KLASIFIKASI MULTI-BUAH GRADE A/B (REVISI v3: SELARAS DENGAN TRAINING v4)
+====================================================================================
 Dipanggil oleh ESP32 MAIN (fungsi classifyWithCloudAPI di esp32_main.ino).
 Terima foto (multipart/form-data, field "file").
 
-REVISI dari versi sebelumnya:
-- Model sekarang 3 kelas: A, B, BUKAN_APEL (lihat train_apple_grade_model.py).
-- Ditambah CONFIDENCE_THRESHOLD: walau kelas terprediksi A/B, kalau model
-  sendiri tidak cukup yakin (confidence rendah), tetap dianggap TIDAK VALID.
-  Ini mencegah kasus "kebetulan nebak A padahal cuma 51% yakin".
-- Format respons berubah, sekarang SELALU ada field "status":
-    "status": "ok"      -> grade valid, boleh dipakai (grade berisi "A"/"B")
-    "status": "unsure"  -> BUKAN grade sah (bisa karena kelas BUKAN_APEL,
-                            atau karena confidence < threshold). grade akan
-                            berisi null. ESP32 WAJIB treat ini sama seperti
-                            gagal klasifikasi (masuk jalur belakang / box C),
-                            BUKAN pernah dipakai sebagai grade C.
-    "status": "error"   -> error internal (file rusak, dll)
+REVISI dari versi sebelumnya (v2, multi-buah + BUKAN_BUAH):
+- Kelas "BUKAN_BUAH" DIHAPUS TOTAL, mengikuti training script v4
+  (train_fruit_grade_model.py) yang sudah tidak melatih kelas ini lagi
+  (asumsi rig conveyor tertutup/terkontrol, kecil kemungkinan ada objek
+  non-buah lewat). CLASS_NAMES di bawah sekarang HANYA berisi kelas
+  berpola "{buah}_{GRADE}", tidak ada lagi kelas pemaksa ketiga.
+- Field response "status": "unsure" sekarang HANYA bisa terjadi karena
+  confidence di bawah CONFIDENCE_THRESHOLD (bukan lagi karena kelas
+  BUKAN_BUAH, yang sudah tidak ada).
+- Ditambah field "kualitas" ("Bagus"/"Jelek") di response, turunan
+  langsung dari grade (A=Bagus, B=Jelek), lewat SATU mapping terpusat
+  (GRADE_LABELS) supaya konsumen API (ESP32, Apps Script logging) tidak
+  perlu menghardcode arti A/B masing-masing.
+- Ditambah validasi input (tipe & ukuran file), endpoint /health, dan
+  logging terstruktur -- supaya server lebih mudah didiagnosis kalau ada
+  masalah di lapangan (skala industrial, bukan cuma demo).
+- Server sengaja GAGAL START (bukan nyala setengah-setengah) kalau model
+  gagal di-load atau jumlah output model tidak cocok dengan CLASS_NAMES --
+  lebih baik ketahuan di deploy log daripada 500 error membingungkan tiap
+  ada request /predict masuk.
+
+PENTING SOAL CLASS_NAMES DI BAWAH:
+Urutan CLASS_NAMES di sini HARUS SAMA PERSIS dengan urutan yang dicetak
+training script (train_fruit_grade_model.py) di CELL 3, bagian
+"Kelas terdeteksi & jumlah foto valid". Urutan itu SELALU alfabetis
+berdasarkan nama folder di Drive kamu (mis. apel_A, apel_B, jeruk_A,
+jeruk_B; kalau nanti nambah buah baru mis. "mangga", dia otomatis masuk
+sesuai abjad: apel_A, apel_B, jeruk_A, jeruk_B, mangga_A, mangga_B).
+List di bawah CUMA CONTOH sesuai docstring training script (baru ada
+apel & jeruk) -- ganti dengan list ASLI hasil print CELL 3 punya kamu
+kalau dataset kamu sudah beda.
 """
 
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import JSONResponse
-import tensorflow as tf
-import numpy as np
-from PIL import Image
 import io
+import logging
 
-app = FastAPI()
+import numpy as np
+import tensorflow as tf
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+from PIL import Image, UnidentifiedImageError
 
-# Model di-load sekali saat server nyala, dipakai berulang-ulang tiap request.
-model = tf.keras.models.load_model("apple_grade_model.keras")
+# ----------------------------------------------------------------------
+# Logging - error di lapangan (foto korup, model gagal load, dll) harus
+# kelihatan jelas di log Render, bukan cuma hilang jadi HTTP 500 kosong.
+# ----------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("siam-grade-api")
 
-IMG_SIZE = 64  # HARUS SAMA dengan IMG_SIZE saat training di Colab
+app = FastAPI(title="SIAM Bali Grade API", version="3.0.0")
 
-# URUTAN INI HARUS SAMA PERSIS dengan CLASS_NAMES saat training
-# (train_apple_grade_model.py CELL 2) - kalau beda urutan, index hasil
-# prediksi akan salah dipetakan ke nama kelas yang salah.
-CLASS_NAMES = ["A", "B", "BUKAN_APEL"]
+# ----------------------------------------------------------------------
+# Konfigurasi model
+# ----------------------------------------------------------------------
+MODEL_PATH = "fruit_grade_model.keras"
+IMG_SIZE = 96  # HARUS SAMA dengan IMG_SIZE saat training (CELL 2 train_fruit_grade_model.py)
 
-# Ambang minimum keyakinan model (0.0 - 1.0) supaya grade A/B dianggap
-# valid dan boleh dipakai sistem. Kalau confidence di bawah ini, walau
-# kelas mentahnya A/B, tetap dibalas sebagai "unsure".
-#
-# Cara nentuin angka ini: lihat print "Akurasi per kelas" di CELL 7
-# training. Kalau model masih sering salah, naikkan threshold (lebih
-# ketat, lebih banyak "unsure" tapi lebih jarang salah grade). Kalau
-# model sudah sangat akurat tapi kebanyakan buah malah dianggap
-# "unsure", boleh turunkan sedikit. 0.75 adalah titik awal yang wajar.
+# GANTI list ini dengan urutan ASLI hasil print CELL 3 di Colab kamu.
+CLASS_NAMES = [
+    "apel_A",
+    "apel_B",
+    "jeruk_A",
+    "jeruk_B",
+]
+
+# A = bagus/segar, B = jelek/busuk (definisi sama seperti training script).
+# SATU-SATUNYA tempat mapping ini didefinisikan di sisi API.
+GRADE_LABELS = {"A": "Bagus", "B": "Jelek"}
+
+# Ambang minimum keyakinan model (0.0 - 1.0) supaya grade dianggap valid dan
+# boleh dipakai sistem. Lihat print "Akurasi per kelas" di CELL 10 training
+# untuk menentukan angka yang wajar. 0.75 adalah titik awal.
 CONFIDENCE_THRESHOLD = 0.75
+
+# Validasi upload dasar, supaya file sampah/kebesaran tidak bikin server hang.
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024  # 8 MB
+
+# ----------------------------------------------------------------------
+# Load model sekali saat server nyala, dipakai berulang-ulang tiap request.
+# ----------------------------------------------------------------------
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    if model.output_shape[-1] != len(CLASS_NAMES):
+        raise ValueError(
+            f"Jumlah output model ({model.output_shape[-1]}) tidak cocok dengan "
+            f"jumlah CLASS_NAMES ({len(CLASS_NAMES)}). Cek lagi CLASS_NAMES di app.py "
+            f"apakah sudah sesuai urutan CELL 3 training script."
+        )
+    logger.info("Model berhasil di-load. Kelas: %s", CLASS_NAMES)
+except Exception:
+    logger.exception("GAGAL load model saat startup - server tidak akan bisa melayani /predict.")
+    raise
 
 
 @app.get("/")
@@ -55,39 +104,66 @@ def root():
     return {"status": "online", "message": "SIAM Bali Grade API siap"}
 
 
+@app.get("/health")
+def health():
+    """Health check sederhana untuk load balancer / uptime monitor."""
+    return {"status": "ok", "model_loaded": model is not None, "classes": CLASS_NAMES}
+
+
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    try:
-        image_bytes = await file.read()
-        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        img = img.resize((IMG_SIZE, IMG_SIZE))
+    # --- Validasi input dasar ---
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Tipe file tidak didukung: {file.content_type}")
 
+    image_bytes = await file.read()
+    if len(image_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Ukuran file terlalu besar (maks 8MB).")
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except UnidentifiedImageError:
+        return JSONResponse({"status": "error", "error": "File bukan gambar yang valid"}, status_code=400)
+
+    try:
+        img = img.resize((IMG_SIZE, IMG_SIZE))
         img_array = np.array(img, dtype=np.float32)
         img_array = np.expand_dims(img_array, axis=0)  # jadi batch of 1
 
         prediction = model.predict(img_array, verbose=0)
         class_index = int(np.argmax(prediction[0]))
         confidence = float(prediction[0][class_index])
-        predicted_class = CLASS_NAMES[class_index]
+        predicted_label = CLASS_NAMES[class_index]
 
-        is_confident_enough = confidence >= CONFIDENCE_THRESHOLD
-        is_actual_apple = predicted_class in ("A", "B")
+        # Semua kelas sekarang pasti berpola "{buah}_{GRADE}" (tidak ada lagi
+        # kasus khusus BUKAN_BUAH), jadi split labelnya cukup rsplit sekali.
+        buah, grade = predicted_label.rsplit("_", 1)
+        kualitas = GRADE_LABELS.get(grade, "Tidak diketahui")
 
-        if is_actual_apple and is_confident_enough:
+        if confidence >= CONFIDENCE_THRESHOLD:
             return JSONResponse({
                 "status": "ok",
-                "grade": predicted_class,
-                "confidence": round(confidence, 4)
+                "buah": buah,
+                "grade": grade,
+                "kualitas": kualitas,
+                "confidence": round(confidence, 4),
             })
 
-        # Kelas BUKAN_APEL, ATAU confidence di bawah threshold -> JANGAN
-        # PERNAH dianggap grade sah, walau kelas mentahnya kebetulan A/B.
+        # Confidence di bawah threshold -> JANGAN PERNAH dianggap grade sah,
+        # walau kelas mentahnya kebetulan buah_grade yang valid.
+        logger.info(
+            "Prediksi unsure: %s (confidence=%.4f < threshold=%.2f)",
+            predicted_label, confidence, CONFIDENCE_THRESHOLD,
+        )
         return JSONResponse({
             "status": "unsure",
+            "buah": None,
             "grade": None,
+            "kualitas": None,
             "confidence": round(confidence, 4),
-            "raw_class": predicted_class  # buat debugging/logging, bukan dipakai ESP32
+            "raw_class": predicted_label,  # buat debugging/logging, bukan dipakai ESP32
         })
 
     except Exception as e:
+        logger.exception("Error saat memproses /predict")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)

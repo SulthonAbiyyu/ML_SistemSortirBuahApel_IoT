@@ -1,0 +1,47 @@
+CARA JALANKAN KAMERA (buat operator, TIDAK PERLU paham programming)
+======================================================================
+
+YANG DIBUTUHKAN:
+- Laptop ini, dengan 2 webcam USB sudah tercolok.
+- File "CameraBridgeServer.exe" (taruh di Desktop biar gampang).
+- Laptop nyambung ke WiFi/hotspot yang SAMA dengan alat sortir.
+
+LANGKAH:
+1. Colok 2 webcam USB ke laptop. Pastikan kedua lampu indikator
+   webcam menyala (kalau ada).
+2. Double-click "CameraBridgeServer.exe".
+3. Kalau muncul jendela biru "Windows protected your PC":
+   - Klik tulisan kecil "More info"
+   - Klik tombol "Run anyway"
+   (Ini normal, bukan virus -- muncul karena programnya buatan
+   sendiri, bukan dari Microsoft/Play Store.)
+4. Kalau muncul jendela "User Account Control" nanya izin:
+   - Klik "Yes"
+   (WAJIB, program ini butuh izin admin buat jalan.)
+5. Akan muncul jendela hitam (jangan ditutup!) berisi tulisan
+   seperti ini:
+
+     ATAS     (camtop.local) <- index 0: SIAP
+     SAMPING  (camside.local) <- index 1: SIAP
+
+   Kalau KEDUANYA tertulis "SIAP" -> selesai, kamera sudah aktif,
+   biarkan jendela hitam ini TERBUKA selama alat sortir dipakai.
+
+   Kalau ada yang tertulis "TIDAK TERBACA":
+   - Cek kabel USB webcam yang bersangkutan (lepas-pasang ulang)
+   - Tutup jendela hitam ini (klik X, atau tekan Ctrl+C lalu Enter)
+   - Buka lagi CameraBridgeServer.exe (ulangi dari langkah 2)
+
+6. SELAMA ALAT SORTIR DIPAKAI:
+   - JANGAN tutup jendela hitam ini.
+   - JANGAN biarkan laptop tidur/sleep (matikan sleep mode di
+     Settings > System > Power -> pilih "Never").
+   - Kalau tidak sengaja tertutup, buka lagi dobel-click exe-nya.
+
+7. SELESAI PAKAI ALAT:
+   - Boleh tutup jendela hitam-nya kapan saja (klik X).
+
+KALAU ATAS DAN SAMPING KETUKER (gambar yang harusnya dari kamera
+ATAS malah keluar dari kamera SAMPING atau sebaliknya):
+- Hubungi yang bikin program ini (perlu di-setting ulang index
+  webcam-nya, bukan sesuatu yang bisa operator perbaiki sendiri).
