@@ -16,6 +16,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+#include "mbedtls/base64.h"
+
 const char* WIFI_SETUP_AP_NAME     = "SORTIR-APEL-MAIN-SETUP";
 const char* WIFI_SETUP_AP_PASSWORD = "sortirapel123";
 
@@ -879,8 +881,55 @@ char worseGrade(char a, char b)
   return (ra > rb) ? a : b;
 }
 
+// Encode buffer biner (foto JPEG) jadi string base64, dipakai buat kirim
+// foto ke Google Apps Script lewat body JSON (Apps Script cuma nerima teks).
+String base64EncodeBuffer(const uint8_t* data, size_t len)
+{
+  if (data == nullptr || len == 0) return "";
+
+  size_t outputLen = 0;
+  mbedtls_base64_encode(nullptr, 0, &outputLen, data, len); // hitung ukuran output dulu
+
+  uint8_t* outputBuf = (uint8_t*) malloc(outputLen + 1);
+  if (outputBuf == nullptr)
+  {
+    Serial.println("LOG SHEET: gagal alokasi memori buat base64 encode foto.");
+    return "";
+  }
+
+  size_t actualLen = 0;
+  int ret = mbedtls_base64_encode(outputBuf, outputLen, &actualLen, data, len);
+  if (ret != 0)
+  {
+    free(outputBuf);
+    Serial.println("LOG SHEET: base64 encode foto gagal.");
+    return "";
+  }
+
+  outputBuf[actualLen] = '\0';
+  String result = String((char*) outputBuf);
+  free(outputBuf);
+  return result;
+}
+
+// Escape tanda kutip/backslash biar nama buah aman dimasukin ke string JSON manual.
+String jsonEscape(const String &s)
+{
+  String out;
+  out.reserve(s.length() + 8);
+  for (size_t i = 0; i < s.length(); i++)
+  {
+    char c = s.charAt(i);
+    if (c == '"' || c == '\\') out += '\\';
+    out += c;
+  }
+  return out;
+}
+
 void logToGoogleSheet(unsigned long fruitIdVal, char gradeVal, float weightVal,
-                       String buahVal)
+                       String buahVal,
+                       const uint8_t* imgTop, size_t imgTopLen,
+                       const uint8_t* imgSide, size_t imgSideLen)
 {
   if (!internetReady)
   {
@@ -908,29 +957,56 @@ void logToGoogleSheet(unsigned long fruitIdVal, char gradeVal, float weightVal,
     return;
   }
 
+  Serial.println("LOG SHEET: encode foto ke base64...");
+  String imgTopB64 = base64EncodeBuffer(imgTop, imgTopLen);
+  String imgSideB64 = base64EncodeBuffer(imgSide, imgSideLen);
+
+  size_t estimatedLen = 200 + imgTopB64.length() + imgSideB64.length();
+  String body;
+  body.reserve(estimatedLen);
+
+  body += "{";
+  body += "\"key\":\"" + String(SHEET_SECRET_KEY) + "\",";
+  body += "\"fruitId\":" + String(fruitIdVal) + ",";
+  body += "\"buah\":\"" + jsonEscape(buahVal) + "\",";
+  body += "\"grade\":\"" + String(gradeVal) + "\",";
+  body += "\"weight\":" + String(weightVal, 1);
+  if (imgTopB64.length() > 0)
+  {
+    body += ",\"imgAtas\":\"" + imgTopB64 + "\"";
+  }
+  if (imgSideB64.length() > 0)
+  {
+    body += ",\"imgSamping\":\"" + imgSideB64 + "\"";
+  }
+  body += "}";
+
+  imgTopB64 = "";  // bebasin memori secepatnya, gak dipakai lagi
+  imgSideB64 = "";
+
   HTTPClient http;
   WiFiClientSecure secureClient;
   secureClient.setInsecure();
 
-  http.setConnectTimeout(5000);
-  http.setTimeout(10000);
+  http.setConnectTimeout(8000);
+  http.setTimeout(20000); // upload foto butuh waktu lebih lama dari sekadar teks
 
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
 
-  String url = SHEET_WEBAPP_URL;
-  url += "?key=" + String(SHEET_SECRET_KEY);
-  url += "&fruitId=" + String(fruitIdVal);
-  url += "&buah=" + buahVal;
-  url += "&grade=" + String(gradeVal);
-  url += "&weight=" + String(weightVal, 1);
-
-  if (!http.begin(secureClient, url))
+  if (!http.begin(secureClient, SHEET_WEBAPP_URL))
   {
     Serial.println("LOG SHEET: HTTP BEGIN GAGAL");
     return;
   }
 
-  int code = http.GET();
+  http.addHeader("Content-Type", "application/json");
+
+  Serial.print("LOG SHEET: mengirim data + foto (");
+  Serial.print(body.length());
+  Serial.println(" bytes)...");
+
+  int code = http.POST(body);
+  body = ""; // bebasin memori body abis dikirim
 
   if (code == 200)
   {
@@ -1007,8 +1083,9 @@ void handleFruitArrival()
 
   if (imgDataTop != nullptr && imgLenTop > 0)
   {
+    // imgDataTop SENGAJA belum di-free() di sini -- masih dipakai buat
+    // dilampirkan ke Google Sheets nanti. Di-free() di akhir fungsi ini.
     successTop = classifyWithCloudAPI(imgDataTop, imgLenTop, gradeTop, buahTop);
-    free(imgDataTop);
   }
   else
   {
@@ -1023,8 +1100,8 @@ void handleFruitArrival()
 
   if (imgDataSide != nullptr && imgLenSide > 0)
   {
+    // Sama kayak imgDataTop, belum di-free() -- dipakai buat lampiran Sheets.
     successSide = classifyWithCloudAPI(imgDataSide, imgLenSide, gradeSide, buahSide);
-    free(imgDataSide);
   }
   else
   {
@@ -1052,7 +1129,10 @@ void handleFruitArrival()
 
   if (success)
   {
-    logToGoogleSheet(fruitID, grade, weight, buahFinal);
+    // Foto ATAS/SAMPING masih ada di memori (belum di-free), jadi bisa
+    // ikut dilampirkan ke Google Sheets sebagai thumbnail.
+    logToGoogleSheet(fruitID, grade, weight, buahFinal,
+                      imgDataTop, imgLenTop, imgDataSide, imgLenSide);
 
     Serial.print("BUAH TERDETEKSI: "); Serial.println(buahFinal.length() ? buahFinal : "-");
     Serial.print("GRADE FINAL (terjelek dari 2 sisi): ");
@@ -1073,6 +1153,11 @@ void handleFruitArrival()
 
     sortFruit('C');
   }
+
+  // Bebasin memori foto di titik ini -- SETELAH klasifikasi + logging Sheets
+  // selesai dipakai, baik itu jalur sukses maupun gagal di atas.
+  if (imgDataTop != nullptr) { free(imgDataTop); imgDataTop = nullptr; }
+  if (imgDataSide != nullptr) { free(imgDataSide); imgDataSide = nullptr; }
 
   buzzerBeep(1, 150);
 
@@ -1493,9 +1578,11 @@ void setup()
   if (internetReady)
   {
     buzzerBeep(1, 150);
-    lcdShow("Menyiapkan sistem", "Memanaskan Cloud AI..");
-    keepCloudAPIWarm();
-    lastKeepAlive = millis();
+    lcdShow("SORTIR APEL READY", "Menghangatkan AI..");
+    // Cloud API di-"panasin" secara async lewat loop(), bukan di setup(),
+    // supaya boot tidak nge-block lama dan memicu watchdog reset
+    // (Render.com free tier bisa butuh 30-60+ detik buat cold-start).
+    lastKeepAlive = millis() - KEEP_ALIVE_INTERVAL_MS; // biar langsung dicoba di loop() pertama
   }
 
   Serial.println();

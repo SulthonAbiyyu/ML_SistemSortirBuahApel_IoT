@@ -39,41 +39,81 @@ Jadi walau secara jaringan cuma ada 1 IP:port, secara LOGIKA ESP32
 tetap "melihat" 2 kamera terpisah persis seperti sebelumnya.
 
 ============================================================
-CARA PAKAI
+REVISI #2 -- SUPAYA .EXE BISA DIPAKAI USER AWAM TANPA RIBET
 ============================================================
-1. pip install flask opencv-python zeroconf
-2. Colokkan KEDUA webcam USB ke laptop yang sama.
-3. >>> WAJIB: tentukan CAMERA_INDEX_TOP dan CAMERA_INDEX_SIDE di bawah.
-   Urutan index webcam di OS TIDAK SELALU mengikuti urutan kamu colok
-   port USB-nya -- harus dites, jangan asal tebak 0 dan 1. Cara tes:
+Dua masalah yang diperbaiki di revisi ini dibanding versi sebelumnya:
+
+(A) DULU: harus "Run as Administrator" SETIAP KALI jalankan .exe,
+    karena port 80 butuh hak admin di Windows.
+    SEKARANG: Flask jalan di INTERNAL_PORT (default 8080, TIDAK butuh
+    admin). Supaya ESP32 MAIN yang manggil "http://camtop.local/..."
+    (otomatis port 80) tetap kena, ada 1x SETUP ADMIN YANG DILAKUKAN
+    SEKALI SAJA per komputer (lihat file setup_admin_onetime.bat yang
+    menyertai script ini) -- setelah setup itu, .exe bisa didobel-klik
+    biasa SELAMANYA tanpa admin/UAC/dialog Defender lagi. Setup itu
+    memasang:
+      1. Firewall rule (izinkan .exe ini menerima koneksi masuk)
+      2. netsh portproxy: semua request ke port 80 di-redirect diam-
+         diam ke port 8080 (jadi ESP32 MAIN tidak perlu tahu apa-apa,
+         tetap manggil port 80 seperti biasa).
+
+(B) DULU: index webcam (CAMERA_INDEX_TOP/SIDE) berupa ANGKA yang bisa
+    berubah-ubah tergantung urutan colok/status kamera laptop bawaan
+    (kalau kamera laptop nyala/disable, semua angka index kamera lain
+    bisa ikut geser).
+    SEKARANG: kamera dikenali lewat NAMA device (CAMERA_NAME_TOP /
+    CAMERA_NAME_SIDE di bawah), bukan angka. Nama device biasanya
+    TIDAK BERUBAH walau kamera laptop nyala/mati/index geser -- jadi
+    kamera laptop otomatis diabaikan (namanya beda), TIDAK PERLU
+    di-disable manual lagi. Ini butuh library "pygrabber" (Windows-
+    only, pip install pygrabber) untuk baca nama device DirectShow.
+
+============================================================
+CARA SETUP (dilakukan SEKALI oleh kamu/developer, bukan user akhir)
+============================================================
+1. pip install flask opencv-python zeroconf pygrabber
+2. Colokkan KEDUA webcam USB ke laptop target.
+3. Cari nama asli tiap webcam + cocokkan sama fotonya:
 
        python camera_bridge_server.py --list-cameras
 
-   Ini akan buka index 0..5 satu-satu, ambil 1 foto tiap index yang
-   berhasil, dan simpan sebagai cam_index_0.jpg, cam_index_1.jpg, dst
-   di folder yang sama dengan script ini. Buka file-file itu, lihat
-   mana yang gambarnya dari webcam ATAS dan mana dari SAMPING, lalu
-   isi CAMERA_INDEX_TOP / CAMERA_INDEX_SIDE sesuai hasilnya. Ulangi
-   langkah ini kalau kamu colok ulang/ganti urutan USB webcam-nya,
-   karena index bisa berubah.
-4. Pastikan laptop connect ke WiFi/hotspot YANG SAMA dengan ESP32 MAIN
-   (cuma ESP32 MAIN sekarang, sudah tidak ada ESP32-CAM lain di
-   jaringan ini).
-5. Jalankan script ini SEBAGAI ADMINISTRATOR/ROOT (klik kanan Command
-   Prompt / PowerShell -> "Run as administrator" di Windows, atau
-   "sudo python3 ..." di Linux/Mac). WAJIB karena port 80 cuma bisa
-   dipakai aplikasi dengan hak admin/root.
-        python camera_bridge_server.py
-6. Cek working dengan buka browser DI LAPTOP YANG SAMA:
+   Ini mencetak daftar SEMUA device kamera yang OS kenali (index +
+   NAMA device DirectShow-nya, termasuk kamera laptop bawaan kalau
+   ada), lalu untuk tiap index yang berhasil dibuka, simpan 1 foto
+   sebagai cam_index_0.jpg, cam_index_1.jpg, dst supaya kamu tahu
+   nama itu punya kamera yang mana secara visual.
+4. Isi CAMERA_NAME_TOP dan CAMERA_NAME_SIDE di bawah dengan potongan
+   nama (case-insensitive, cukup sebagian, tidak perlu persis semua)
+   yang UNIK milik tiap webcam eksternal -- JANGAN pakai potongan
+   nama yang juga cocok ke kamera laptop bawaan (nama kamera laptop
+   biasanya mengandung kata seperti "Integrated Camera", "HD WebCam",
+   "Built-in"). Kalau ragu unik atau tidak, lihat daftar lengkap yang
+   dicetak --list-cameras tadi.
+5. Build ulang .exe (PyInstaller, pastikan pygrabber ikut ter-bundle,
+   biasanya otomatis karena di-import di script ini).
+6. Jalankan setup_admin_onetime.bat SEBAGAI ADMINISTRATOR di komputer
+   target -- SEKALI SAJA per komputer, tidak perlu diulang tiap deploy
+   .exe baru selama nomor portnya tidak diganti.
+7. Pastikan laptop connect ke WiFi/hotspot YANG SAMA dengan ESP32 MAIN.
+8. Mulai sekarang, user tinggal DOBEL-KLIK .exe-nya seperti biasa
+   (TANPA klik kanan "Run as Administrator"). Cek working dengan buka
+   browser DI LAPTOP YANG SAMA:
    http://camtop.local/status    -> {"status":"online","unit":"ATAS"}
    http://camside.local/status   -> {"status":"online","unit":"SAMPING"}
-   http://camtop.local/capture   -> {"status":"captured", ...}
-   http://camtop.local/jpg       -> gambar dari webcam ATAS
    (Kalau browser di laptop sendiri belum bisa resolve *.local, itu
    normal di sebagian OS -- coba dari HP yang connect ke WiFi yang
    sama, biasanya HP lebih konsisten dukung mDNS/Bonjour.)
-7. (Debug tambahan) http://<IP-laptop>/ -- halaman ringkasan status
-   KEDUA kamera sekaligus (tidak perlu tahu hostname mDNS-nya).
+9. (Debug tambahan) http://<IP-laptop>:8080/ -- halaman ringkasan
+   status KEDUA kamera + nama device yang terdeteksi (akses lewat
+   port 8080 langsung, bukan lewat portproxy).
+
+CATATAN: kalau suatu saat kamu ganti merk/model webcam, nama device-
+nya juga berubah -- ulangi langkah 3-5 (cari nama baru, update
+CAMERA_NAME_TOP/SIDE, build ulang .exe). Kalau pygrabber gagal load
+atau nama tidak ketemu, script FALLBACK otomatis ke angka index manual
+(CAMERA_INDEX_TOP_FALLBACK/CAMERA_INDEX_SIDE_FALLBACK) supaya sistem
+tidak mati total -- tapi ini kembali ke masalah lama (index bisa
+geser), jadi perbaiki nama device-nya begitu sempat.
 
 ============================================================
 PENTING - keterbatasan yang harus kamu terima sadar
@@ -85,21 +125,23 @@ PENTING - keterbatasan yang harus kamu terima sadar
   cuma SAMPING doang yang kena).
 - Matikan sleep mode laptop (Settings > Power > Sleep > Never) selama
   dipakai buat testing/demo.
-- Windows Firewall bisa memblokir koneksi masuk - kalau ESP32 MAIN
-  gagal connect padahal script sudah jalan, cek/izinkan "Python" di
-  Windows Defender Firewall (Allow an app through firewall), UNTUK
-  KEDUANYA: jaringan Private DAN aplikasinya sendiri. mDNS butuh
-  network profile "Private" (bukan "Public").
+- Firewall & portproxy sudah diurus SEKALI oleh setup_admin_onetime.bat
+  (lihat REVISI #2 di atas) -- kalau ESP32 MAIN masih gagal connect
+  padahal .exe sudah jalan, kemungkinan setup itu belum pernah
+  dijalankan di komputer ini, atau nomor INTERNAL_PORT di script beda
+  dengan yang di-setup di .bat-nya. mDNS butuh network profile
+  "Private" (bukan "Public") di Windows.
 - KALAU WiFi/venue-nya WiFi publik/kampus dengan "client isolation"
   aktif, TIDAK ADA metode manapun yang akan jalan (bukan bug kode,
   batasan jaringan). Demo/testing paling aman pakai hotspot HP sendiri.
 - Kalau salah satu webcam USB dicabut/lepas di tengah operasi, HANYA
   unit itu yang jadi OFFLINE (dideteksi lewat /status per-unit) --
   unit satunya tetap jalan normal, tidak saling menjatuhkan.
-- Webcam murah kadang tertukar index-nya kalau di-unplug lalu di-plug
-  ulang (apalagi beda urutan port USB). Kalau tiba-tiba gambar ATAS &
-  SAMPING keliatan "ketuker", jalankan ulang --list-cameras dan cek
-  lagi CAMERA_INDEX_TOP/CAMERA_INDEX_SIDE.
+- Kamera laptop bawaan BOLEH tetap aktif (tidak perlu di-disable) --
+  deteksi sekarang berdasarkan NAMA device (CAMERA_NAME_TOP/SIDE),
+  bukan angka index, jadi kamera laptop otomatis diabaikan selama
+  namanya tidak mengandung potongan teks yang sama dengan 2 webcam
+  eksternal.
 
 ============================================================
 STATUS FILE esp32camATAS.ino / esp32camSAMPING.ino: SUDAH TIDAK DIPAKAI
@@ -125,16 +167,99 @@ from flask import Flask, Response, jsonify, request
 import cv2
 from zeroconf import Zeroconf, ServiceInfo
 
+try:
+    from pygrabber.dshow_graph import FilterGraph
+    HAS_PYGRABBER = True
+except ImportError:
+    # pygrabber tidak ke-install / bukan Windows -> nanti fallback ke
+    # index manual otomatis, lihat resolve_camera_indices().
+    HAS_PYGRABBER = False
+
 app = Flask(__name__)
 
 # ============================================================
-# >>> WAJIB DICEK: INDEX WEBCAM DI OS <<<
+# PORT INTERNAL FLASK -- lihat REVISI #2 di docstring atas.
 # ============================================================
-# Jalankan "python camera_bridge_server.py --list-cameras" dulu untuk
-# menentukan angka yang benar (lihat instruksi CARA PAKAI langkah 3 di
-# docstring atas). JANGAN asumsikan 0 = kamera pertama yang dicolok.
-CAMERA_INDEX_TOP = 0
-CAMERA_INDEX_SIDE = 1
+# TIDAK PAKAI 80 lagi supaya .exe tidak butuh admin tiap dijalankan.
+# Port 80 tetap "kelihatan" dari luar (ESP32 MAIN) berkat portproxy
+# yang dipasang SEKALI lewat setup_admin_onetime.bat. Kalau kamu ganti
+# angka ini, WAJIB jalankan ulang setup_admin_onetime.bat juga dengan
+# angka yang sama supaya portproxy-nya cocok.
+INTERNAL_PORT = 8080
+
+# ============================================================
+# >>> WAJIB DICEK SEKALI: NAMA WEBCAM DI OS <<<
+# ============================================================
+# Jalankan "python camera_bridge_server.py --list-cameras" untuk lihat
+# nama semua device kamera yang OS kenali (lihat instruksi CARA SETUP
+# langkah 3 di docstring atas). Isi potongan nama yang UNIK untuk tiap
+# webcam eksternal -- jangan sampai potongan ini juga cocok ke nama
+# kamera laptop bawaan. Cocok = "mengandung teks ini", tidak perlu
+# sama persis, tidak case-sensitive.
+CAMERA_NAME_TOP = "JETE-W7"
+CAMERA_NAME_SIDE = "WEB CAMER"
+
+# Fallback kalau pygrabber tidak tersedia ATAU nama di atas tidak
+# ketemu/ambigu -- dipakai APA ADANYA, jadi tetap rawan geser kalau
+# kamera laptop nyala-mati. Perbaiki nama device di atas begitu sempat.
+CAMERA_INDEX_TOP_FALLBACK = 1
+CAMERA_INDEX_SIDE_FALLBACK = 0
+
+
+def list_camera_devices():
+    """Kembalikan list nama device kamera sesuai urutan index yang
+    dipakai cv2.VideoCapture (index list = posisi array). Kosong kalau
+    pygrabber tidak tersedia."""
+    if not HAS_PYGRABBER:
+        return []
+    try:
+        return FilterGraph().get_input_devices()
+    except Exception as e:
+        print(f"[KAMERA] Gagal baca daftar nama device via pygrabber: {e}")
+        return []
+
+
+def find_index_by_name(name_substring, device_names):
+    """Cari SATU index yang namanya mengandung name_substring
+    (case-insensitive). Return None kalau tidak ketemu atau ambigu
+    (lebih dari 1 cocok -- lebih aman gagal daripada salah pilih)."""
+    needle = name_substring.strip().lower()
+    matches = [i for i, name in enumerate(device_names) if needle in name.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def resolve_camera_indices():
+    """Tentukan index TOP & SIDE yang dipakai. Prioritas: cocokkan
+    CAMERA_NAME_TOP/SIDE ke daftar nama device (kamera laptop otomatis
+    terhindar karena namanya beda). Kalau gagal, fallback ke angka
+    manual di atas -- dicetak warning supaya ketahuan."""
+    device_names = list_camera_devices()
+
+    if device_names:
+        print("[KAMERA] Device kamera terdeteksi OS:")
+        for i, name in enumerate(device_names):
+            print(f"    index {i}: {name}")
+
+        idx_top = find_index_by_name(CAMERA_NAME_TOP, device_names)
+        idx_side = find_index_by_name(CAMERA_NAME_SIDE, device_names)
+
+        if idx_top is not None and idx_side is not None and idx_top != idx_side:
+            print(f"[KAMERA] Cocok by NAMA -> ATAS=index {idx_top}, SAMPING=index {idx_side}")
+            return idx_top, idx_side
+
+        print("[KAMERA] PERINGATAN: CAMERA_NAME_TOP/SIDE tidak ketemu/ambigu/sama. "
+              "Cek lagi isi CAMERA_NAME_TOP/CAMERA_NAME_SIDE di script ini "
+              "dibanding daftar nama di atas. FALLBACK ke index manual.")
+    else:
+        print("[KAMERA] pygrabber tidak tersedia/gagal baca nama device. "
+              "FALLBACK ke index manual (rawan geser kalau kamera laptop nyala-mati).")
+
+    return CAMERA_INDEX_TOP_FALLBACK, CAMERA_INDEX_SIDE_FALLBACK
+
+
+CAMERA_INDEX_TOP, CAMERA_INDEX_SIDE = resolve_camera_indices()
 
 # Resolusi capture. Turunkan kalau webcam/USB hub kamu tidak kuat di
 # 1280x720 (capture jadi gagal/lambat) -- 640x480 biasanya aman.
@@ -356,8 +481,20 @@ def start_mdns(local_ip):
 
 
 def list_cameras_and_exit():
-    """--list-cameras: buka index 0..5, simpan 1 foto tiap index yang
-    berhasil, buat bantu user nentuin CAMERA_INDEX_TOP/SIDE yang benar."""
+    """--list-cameras: cetak NAMA device tiap kamera (kalau pygrabber
+    ada), lalu buka index 0..5, simpan 1 foto tiap index yang berhasil
+    -- buat bantu tentukan CAMERA_NAME_TOP/SIDE yang benar."""
+    device_names = list_camera_devices()
+    if device_names:
+        print("Nama device kamera yang terdeteksi OS (urutan = index):")
+        for i, name in enumerate(device_names):
+            print(f"  index {i}: {name}")
+        print()
+    else:
+        print("(pygrabber tidak tersedia -- tidak bisa baca nama device, "
+              "cuma bisa cocokkan lewat foto di bawah)")
+        print()
+
     print("Mengecek index webcam yang tersedia (0..5)...")
     found_any = False
 
@@ -385,8 +522,10 @@ def list_cameras_and_exit():
     if not found_any:
         print("Tidak ada webcam terdeteksi sama sekali. Cek koneksi USB / driver.")
 
-    print("\nSetelah lihat foto-fotonya, set CAMERA_INDEX_TOP dan "
-          "CAMERA_INDEX_SIDE di bagian atas file ini sesuai index yang cocok.")
+    print("\nSetelah lihat foto-fotonya dan cocokkan dengan nama device di "
+          "atas, set CAMERA_NAME_TOP dan CAMERA_NAME_SIDE di bagian atas "
+          "file ini dengan potongan nama yang unik untuk tiap webcam "
+          "eksternal (jangan yang juga cocok ke kamera laptop bawaan).")
 
 
 if __name__ == "__main__":
@@ -402,17 +541,22 @@ if __name__ == "__main__":
     print("CAMERA BRIDGE SERVER - 2 WEBCAM")
     print("========================================")
     for key, cam in CAMERAS.items():
-        ready = "SIAP" if cam.is_ok() else "TIDAK TERBACA (cek USB/index!)"
+        ready = "SIAP" if cam.is_ok() else "TIDAK TERBACA (cek USB/nama device!)"
         print(f"  {cam.unit_label:8s} ({key}.local) <- index {cam.camera_index}: {ready}")
-    print(f"IP laptop: {local_ip} (port 80)")
+    print(f"IP laptop: {local_ip}")
+    print(f"Flask jalan di port internal {INTERNAL_PORT} (bukan 80 -- "
+          f"lihat REVISI #2 di docstring, port 80 di-handle portproxy).")
+    print("Kalau ESP32 MAIN belum bisa connect ke camtop.local/camside.local, "
+          "pastikan setup_admin_onetime.bat sudah pernah dijalankan SEBAGAI "
+          "ADMIN di komputer ini (cukup sekali).")
     print("========================================")
     print()
 
     try:
         # host="0.0.0.0" -> bisa diakses dari device lain di jaringan
-        # yang sama (ESP32 MAIN). port=80 -> HARUS 80 (lihat penjelasan
-        # di docstring atas). Jalankan sebagai Administrator/root.
-        app.run(host="0.0.0.0", port=80, threaded=True)
+        # yang sama (ESP32 MAIN, lewat portproxy port 80 -> INTERNAL_PORT).
+        # port=INTERNAL_PORT -> port bebas (>1024), TIDAK butuh admin.
+        app.run(host="0.0.0.0", port=INTERNAL_PORT, threaded=True)
     finally:
         # Cabut pengumuman mDNS kalau script ditutup (Ctrl+C), supaya
         # camtop.local/camside.local tidak "nyangkut" nunjuk ke laptop
