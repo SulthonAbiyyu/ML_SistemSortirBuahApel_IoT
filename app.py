@@ -76,7 +76,7 @@ GRADE_LABELS = {"A": "Bagus", "B": "Jelek"}
 # Ambang minimum keyakinan model (0.0 - 1.0) supaya grade dianggap valid dan
 # boleh dipakai sistem. Lihat print "Akurasi per kelas" di CELL 10 training
 # untuk menentukan angka yang wajar. 0.75 adalah titik awal.
-CONFIDENCE_THRESHOLD = 0.75
+CONFIDENCE_THRESHOLD = 0.6
 
 # Validasi upload dasar, supaya file sampah/kebesaran tidak bikin server hang.
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png"}
