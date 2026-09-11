@@ -332,15 +332,59 @@ class CameraUnit:
 
         self.camera_index, self.cap = self._open_camera_with_retry()
 
-        self.cap.set(
-            cv2.CAP_PROP_FRAME_WIDTH,
-            ARCHIVE_WIDTH
+        # PENTING: paksa format MJPG DULU sebelum set resolusi. Tanpa ini,
+        # banyak webcam default ke format mentah (YUY2) yang bandwidth-nya
+        # di USB terbatas -- begitu diminta resolusi tinggi, driver diam-diam
+        # menolak dan jatuh ke resolusi minimum yang didukung, tanpa error
+        # apapun. MJPG sudah terkompresi jadi jauh lebih hemat bandwidth.
+        fourcc_ok = self.cap.set(
+            cv2.CAP_PROP_FOURCC,
+            cv2.VideoWriter_fourcc(*'MJPG')
+        )
+        actual_fourcc = int(self.cap.get(cv2.CAP_PROP_FOURCC))
+        actual_fourcc_str = "".join([chr((actual_fourcc >> (8 * i)) & 0xFF) for i in range(4)])
+        print(
+            f"[KAMERA] {self.unit_label}: set FOURCC MJPG -> "
+            f"{'OK' if fourcc_ok else 'DITOLAK driver'} "
+            f"(FOURCC aktif sekarang: '{actual_fourcc_str}')"
         )
 
-        self.cap.set(
-            cv2.CAP_PROP_FRAME_HEIGHT,
-            ARCHIVE_HEIGHT
-        )
+        # Coba beberapa resolusi dari BESAR ke KECIL -- kalau resolusi yang
+        # kita minta ternyata tidak ada di daftar mode webcam ini (walau
+        # sudah MJPG), driver bisa diam-diam jatuh ke resolusi minimum
+        # (mis. 160x120) tanpa lapor error. Jadi di sini kita VERIFIKASI
+        # SENDIRI hasil tiap percobaan lewat cap.get(), bukan cuma percaya
+        # cap.set() (yang returnnya sering True walau permintaan ditolak).
+        RESOLUTION_CANDIDATES = [
+            (ARCHIVE_WIDTH, ARCHIVE_HEIGHT),  # 1280x720 (target ideal)
+            (1024, 768),
+            (800, 600),
+            (640, 480),
+            (320, 240),
+        ]
+
+        applied_w, applied_h = None, None
+        for cand_w, cand_h in RESOLUTION_CANDIDATES:
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cand_w)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cand_h)
+            got_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            got_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(
+                f"[KAMERA] {self.unit_label}: minta {cand_w}x{cand_h} -> "
+                f"driver kasih {got_w}x{got_h}"
+            )
+            if got_w == cand_w and got_h == cand_h:
+                applied_w, applied_h = got_w, got_h
+                break
+
+        if applied_w is None:
+            print(
+                f"[KAMERA] PERINGATAN: {self.unit_label} MENOLAK SEMUA "
+                f"kandidat resolusi di atas walau sudah MJPG -- webcam ini "
+                f"kemungkinan besar memang cuma mendukung resolusi sangat "
+                f"rendah secara fisik/driver, atau bandwidth USB-nya "
+                f"kepotong (coba pindah ke port USB lain / lepas dari hub)."
+            )
 
         self.last_jpeg_bytes = None
         self.last_archive_bytes = None

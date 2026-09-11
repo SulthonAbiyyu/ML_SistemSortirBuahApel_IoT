@@ -1,4 +1,4 @@
-# 🍎 SIAM BALI — Sistem Sortir Otomatis Multi-Buah Berdasarkan Grade Menggunakan IoT dan Machine Learning
+# 🍎 Sistem Sortir Otomatis Multi-Buah Organik Berdasarkan Grade Menggunakan IoT dan Machine Learning
 
 > Sistem sortir buah otomatis berbasis **ESP32**, **Computer Vision (Deep Learning)**, dan **Cloud API**, yang mampu mengklasifikasikan kualitas buah (Grade A/B) secara *real-time* langsung di atas jalur conveyor, lalu mencatat setiap hasil sortir ke **Google Spreadsheet** secara otomatis.
 
@@ -21,8 +21,9 @@
 9. [Cara Instalasi & Konfigurasi](#-9-cara-instalasi--konfigurasi)
 10. [Dokumentasi Visual](#-10-dokumentasi-visual)
 11. [Mitra & Dampak di Lapangan](#-11-mitra--dampak-di-lapangan)
-12. [Rencana Pengembangan Selanjutnya](#-12-rencana-pengembangan-selanjutnya)
-13. [Kontributor](#-13-kontributor)
+12. [Kekurangan & Keterbatasan Sistem Saat Ini](#-12-kekurangan--keterbatasan-sistem-saat-ini)
+13. [Rencana Pengembangan Selanjutnya](#-13-rencana-pengembangan-selanjutnya)
+14. [Kontributor](#-14-kontributor)
 
 ---
 
@@ -30,7 +31,7 @@
 
 Proses sortir buah secara manual di tingkat petani maupun UMKM pengepakan buah umumnya masih dilakukan dengan cara visual oleh manusia. Cara ini memiliki beberapa kelemahan mendasar: **subjektif** (standar "bagus" dan "jelek" berbeda-beda antar pekerja), **lambat**, **tidak konsisten** dalam jangka waktu lama akibat kelelahan, dan **sulit didokumentasikan** untuk keperluan pelaporan maupun analisis kualitas hasil panen.
 
-**SIAM BALI** (Sistem Identifikasi & Automasi Mutu Buah — Berbasis Artificial Intelligence) hadir sebagai solusi atas permasalahan tersebut. Proyek ini menggabungkan tiga bidang teknologi sekaligus:
+Sistem ini hadir sebagai solusi atas permasalahan tersebut. Proyek ini menggabungkan tiga bidang teknologi sekaligus:
 
 - **Internet of Things (IoT)** — menggunakan mikrokontroler ESP32 sebagai otak sistem mekanik (timbangan, servo penyortir, layar informasi).
 - **Machine Learning / Computer Vision** — menggunakan model *deep learning* (CNN) untuk mengenali jenis buah sekaligus kualitasnya hanya dari citra kamera.
@@ -252,20 +253,30 @@ Alat ini telah diserahterimakan dan diujicobakan langsung di kebun mitra **Asosi
 
 Testimoni ini menegaskan bahwa tujuan awal proyek — menggantikan proses sortir manual yang subjektif, lambat, dan tidak konsisten — berhasil dirasakan langsung dampaknya oleh mitra di lapangan.
 
-> 📌 *Catatan: kutipan di atas telah dirangkai ulang dari inti pernyataan lisan pemilik mitra menjadi kalimat tertulis, bukan transkrip kata-per-kata dari video. Disarankan menambahkan cuplikan atau tautan video aslinya sebagai bukti pendukung jika README ini digunakan untuk keperluan formal (laporan/skripsi).*
+---
+
+## ⚠️ 12. Kekurangan & Keterbatasan Sistem Saat Ini
+
+Sebagai prototipe, sistem ini masih memiliki sejumlah keterbatasan yang perlu diperhatikan dan menjadi fokus pengembangan lanjutan:
+
+1. **Cakupan Jenis Buah Masih Terbatas** — model saat ini baru dilatih dan mendukung klasifikasi untuk **buah apel dan jeruk**. Untuk buah organik lain seperti buah naga, jambu kristal, dan sebagainya, diperlukan penambahan dataset baru dari masing-masing jenis buah tersebut, lalu dilakukan pelatihan ulang (*re-training*) model sebelum dapat digunakan.
+2. **Spesifikasi Perangkat Masih Skala Kecil (Prototipe)** — perangkat keras yang digunakan saat ini masih berupa rangkaian skala kecil untuk keperluan riset/uji coba. Untuk implementasi skala produksi yang lebih besar dan andal, diperlukan penambahan **mini PC** sebagai unit pemroses yang lebih kuat, serta peningkatan (*upgrade*) komponen-komponen pendukung seperti kamera, servo, sensor IR, dan lainnya agar lebih presisi dan tahan pemakaian jangka panjang.
+3. **Belum Mendukung Sortir Banyak Buah Sekaligus** — sistem saat ini hanya dapat memproses **satu buah dalam satu waktu** (satu per satu secara berurutan di atas load cell). Pemrosesan banyak buah secara bersamaan pada satu waktu (*batch/paralel*) belum didukung dan menjadi salah satu prioritas pengembangan ke depan untuk meningkatkan kapasitas throughput sortir.
 
 ---
 
-## 🚀 12. Rencana Pengembangan Selanjutnya
+## 🚀 13. Rencana Pengembangan Selanjutnya
 
-- Menambah jumlah jenis buah yang didukung model (mangga, jambu kristal, buah naga, dst).
+- Menambah jumlah jenis buah yang didukung model (mangga, jambu kristal, buah naga, dst) beserta dataset pelatihannya.
+- Upgrade perangkat keras ke skala yang lebih besar (mini PC, kamera, servo, dan sensor yang lebih andal) untuk kebutuhan produksi.
+- Mengembangkan kemampuan sortir untuk banyak buah sekaligus, tidak lagi satu per satu.
 - Migrasi sebagian atau seluruh proses inferensi ke *edge device* untuk mengurangi ketergantungan pada koneksi internet.
 - Dashboard web untuk visualisasi data hasil sortir secara langsung dari Google Sheet.
 - Penambahan sensor tambahan untuk estimasi ukuran buah, tidak hanya berat dan citra.
 
 ---
 
-## 👤 13. Kontributor
+## 👤 14. Kontributor
 
 **Muhammad Sulthon Abiyyu** (Matchaby)
 Mahasiswa S1 Informatika — Universitas Muhammadiyah Sidoarjo
