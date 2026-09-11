@@ -217,8 +217,11 @@ ML/                                          ← root repository (folder ini)
 ### Perangkat Conveyor & Rangkaian
 ![Foto Hardware Conveyor](docs/images/foto-hardware.jpg)
 
-### Contoh Hasil Klasifikasi & Pencatatan
-![Hasil Sortir](docs/images/foto-hasil-sortir.jpg)
+### Penjelasan Sistem ke Mitra
+![Foto Penjelasan Sistem](docs/images/foto-penjelasan.jpg)
+
+### Kunjungan ke Mitra
+![Foto Mitra](docs/images/foto-mitra.jpeg)
 
 ---
 
