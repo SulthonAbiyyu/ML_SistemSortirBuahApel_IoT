@@ -23,7 +23,6 @@
 11. [Mitra & Dampak di Lapangan](#-11-mitra--dampak-di-lapangan)
 12. [Kekurangan & Keterbatasan Sistem Saat Ini](#-12-kekurangan--keterbatasan-sistem-saat-ini)
 13. [Rencana Pengembangan Selanjutnya](#-13-rencana-pengembangan-selanjutnya)
-14. [Kontributor](#-14-kontributor)
 
 ---
 
@@ -215,32 +214,11 @@ ML/                                          ← root repository (folder ini)
 
 ## 🖼️ 10. Dokumentasi Visual
 
-> **📌 Ke mana gambar harus ditaruh?**
-> Karena root repository Git kamu saat ini berada di folder `ML/` (lokasi file `.git` sesuai screenshot Explorer kamu), buat folder baru bernama **`docs/images/`** *di dalam* folder `ML/` tersebut — jadi sejajar dengan `app.py`, `esp32_main.ino`, dll. Taruh kedua foto dokumentasi kamu di situ, lalu commit & push seperti file lainnya.
->
-> Struktur akhirnya:
-> ```
-> ML/
-> ├── app.py
-> ├── esp32_main.ino
-> ├── README.md              ← file ini
-> └── docs/
->     └── images/
->         ├── foto-hardware.jpg      (ganti sesuai nama file kamu)
->         └── foto-hasil-sortir.jpg  (ganti sesuai nama file kamu)
-> ```
->
-> Setelah gambar ada di folder tersebut, referensikan di README menggunakan **path relatif** seperti di bawah ini (ganti nama file sesuai punya kamu):
-
-```markdown
 ### Perangkat Conveyor & Rangkaian
 ![Foto Hardware Conveyor](docs/images/foto-hardware.jpg)
 
 ### Contoh Hasil Klasifikasi & Pencatatan
 ![Hasil Sortir](docs/images/foto-hasil-sortir.jpg)
-```
-
-Karena GitHub merender path relatif berdasarkan lokasi file `README.md`, selama `README.md` juga berada tepat di root `ML/` (sejajar dengan `docs/`), gambar akan otomatis tampil begitu di-push ke GitHub — tidak perlu link eksternal apa pun.
 
 ---
 
@@ -273,15 +251,6 @@ Sebagai prototipe, sistem ini masih memiliki sejumlah keterbatasan yang perlu di
 - Migrasi sebagian atau seluruh proses inferensi ke *edge device* untuk mengurangi ketergantungan pada koneksi internet.
 - Dashboard web untuk visualisasi data hasil sortir secara langsung dari Google Sheet.
 - Penambahan sensor tambahan untuk estimasi ukuran buah, tidak hanya berat dan citra.
-
----
-
-## 👤 14. Kontributor
-
-**Muhammad Sulthon Abiyyu** (Matchaby)
-Mahasiswa S1 Informatika — Universitas Muhammadiyah Sidoarjo
-GitHub: [@SulthonAbiyyu](https://github.com/SulthonAbiyyu)
-Portofolio: [portofoli0ku.web.app](https://portofoli0ku.web.app/)
 
 ---
 
